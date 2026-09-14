@@ -1,13 +1,33 @@
+# ============================================================
+# Task-fMRI GLM and Residual Time-Series Generation
+#
+# Purpose:
+#   Perform AFNI-based task GLM analysis and generate residual
+#   time series for downstream functional connectivity analysis.
+#
+# Adaptation:
+#   Adapted for a preclinical sensory-stimulation fMRI paradigm.
+#
+# Dependencies:
+#   AFNI, Bash
+# ============================================================
 #!/bin/bash
 set -e
 
-#Runs Deconvolution, specifically set for the mouse heat paradigm
+# Task-fMRI GLM and residual time-series generation using AFNI.
+# Adapted for a preclinical sensory-stimulation fMRI paradigm.
 
-#PSC_bool="yes"
+PSC_bool="no"
+ALFF_bool="no"
+MSE_bool="no"
 conn_bool="yes"
-#ALFF_bool="no"
-#MSE_bool="no"
-gen_error_msg="Usage: [-h] [-z] [-a] [-m] -c"
+gen_error_msg="Usage: script.sh [-z] [-a] [-m] [-c censor_file] \
+<scaled_epi> <motion_demean> <motion_deriv> <csf_regressor> <stim_file> <output_prefix>"
+# Options:
+#   -z  Estimate percent signal change using TENT basis functions
+#   -a  Calculate ALFF/fALFF
+#   -m  Calculate multiscale entropy
+#   -c  Censor file for GLM analysis
 while getopts "hzamc:" opt; do
     case ${opt} in
         h|\? ) echo "$gen_error_msg"; exit 0;;
@@ -23,7 +43,7 @@ while getopts "hzamc:" opt; do
 done
 shift $((OPTIND -1))
 
-if [ $# -lt 4 ]; then echo "Not enough inputs"; exit 1; fi
+if [ $# -lt 6 ]; then echo "Not enough inputs"; exit 1; fi
 
 
 epi_scaled=`readlink -ev $1` #Scaled EPI
@@ -32,12 +52,6 @@ motion_deriv=`readlink -ev $3`
 CSF=`readlink -ev $4`
 stim_file=`readlink -ev $5` #Stimulation paradigm
 prefix=`readlink -f $6`
-echo "DEBUG: epi_scaled=$1"
-echo "DEBUG: motion_demean=$2" 
-echo "DEBUG: motion_deriv=$3"
-echo "DEBUG: CSF=$4"
-echo "DEBUG: stim_file=$5"
-echo "DEBUG: prefix=$6"
 
 out_dir=${prefix%/*}
 echo "out_dir is $out_dir"
@@ -73,7 +87,7 @@ fi
 
 
 #===================== Deconvolution ====================
-	#-force_TR 2 \ (only needed this when registration occured before deconvolution)
+
 cd $out_dir
 3dDeconvolve \
     -input $epi_scaled $censor_opt \
@@ -133,17 +147,13 @@ if [ "$MSE_bool" == "yes" ]; then
 fi
 
 #3ddeconvolve structure for connectivity
-
-#-polort should be >= 0
-# -ortvec $motion 6 used for sefmri, rsfmri uses 12
+# Generate residual time series for functional connectivity analysis
+# after regression of CSF, motion parameters, and motion derivatives.
 
 if [ "$conn_bool" == "yes" ]; then
 
     # we can use either 3dDeconvolve or 3ddTproject, but as we don't need to construct GLM, 3dTproject does the job. 
-    # I have both 3dDeconvolve and 3dTproject 
-    #for connectivity analysis, only 6 degree of motion is regressed out
     #the output conn_errts.nii.gz will be called in Mondo_sefMRI_A_mod.sh "Run Task Connectivity" block
-    #do i use censorTrs?
     ##============= 3dDeconvolve option===================##
     3dDeconvolve \
     -input $epi_scaled $censor_opt \
